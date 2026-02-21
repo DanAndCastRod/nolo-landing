@@ -1,0 +1,155 @@
+/* Advanced Styles for NOLO Landing Page */
+
+:root {
+    --color-void: #0a0a0a;
+    --color-fogata: #ff6b35;
+    --color-corcel: #1e3a8a;
+    --color-phoenix: #fbbf24;
+
+    /* Dynamic Theme Variable - changed by JS */
+    --theme-active: var(--color-fogata);
+}
+
+body {
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Selection Color */
+::selection {
+    background-color: var(--theme-active);
+    color: var(--color-void);
+}
+
+/* --- Typography Utilities --- */
+.text-outline {
+    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.3);
+    color: transparent;
+}
+
+/* --- Animations --- */
+
+/* Waveforms */
+@keyframes wave {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+.animate-wave-slow {
+    animation: wave 15s linear infinite;
+}
+
+.animate-wave-fast {
+    animation: wave 10s linear infinite reverse;
+}
+
+/* Fade In */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.8s ease-out forwards;
+}
+
+.animate-fade-in-delayed {
+    opacity: 0;
+    animation: fadeIn 0.8s ease-out 0.5s forwards;
+}
+
+.animate-slide-up {
+    animation: slideUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+/* --- UI Components --- */
+
+/* Tab Active States */
+.tab-btn.active {
+    color: #fff;
+}
+
+.tab-btn[data-theme="fogata"].active {
+    border-color: var(--color-fogata);
+    color: var(--color-fogata);
+}
+
+.tab-btn[data-theme="corcel"].active {
+    border-color: var(--color-corcel);
+    color: var(--color-corcel);
+}
+
+.tab-btn[data-theme="phoenix"].active {
+    border-color: var(--color-phoenix);
+    color: var(--color-phoenix);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-void);
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-active);
+}
+
+/* Grunge Button Hover Glitch Effect (Simple CSS version) */
+.btn-glitch:hover {
+    animation: glitch-skew 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+}
+
+@keyframes glitch-skew {
+    0% {
+        transform: translate(0)
+    }
+
+    20% {
+        transform: translate(-2px, 2px)
+    }
+
+    40% {
+        transform: translate(-2px, -2px)
+    }
+
+    60% {
+        transform: translate(2px, 2px)
+    }
+
+    80% {
+        transform: translate(2px, -2px)
+    }
+
+    100% {
+        transform: translate(0)
+    }
+}
