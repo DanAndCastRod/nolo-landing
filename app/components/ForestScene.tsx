@@ -75,7 +75,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
     moonLight.position.set(-30, 40, -20);
     scene.add(moonLight);
 
-    const fireLight = new THREE.PointLight(0xff9a3c, 30, 40, 2);
+    const fireLight = new THREE.PointLight(0xff6b35, 30, 40, 2);
     fireLight.position.set(0, 1.2, 0);
     scene.add(fireLight);
 
@@ -276,9 +276,9 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
     const flames: THREE.Mesh[] = [];
     {
       const flameSpecs = [
-        { r: 0.42, h: 1.5, color: 0xe25822, opacity: 0.55 },
-        { r: 0.3, h: 1.15, color: 0xff8c1a, opacity: 0.7 },
-        { r: 0.18, h: 0.8, color: 0xffd966, opacity: 0.9 },
+        { r: 0.42, h: 1.5, color: 0xe0491f, opacity: 0.55 },
+        { r: 0.3, h: 1.15, color: 0xff6b35, opacity: 0.7 },
+        { r: 0.18, h: 0.8, color: 0xfbbf24, opacity: 0.9 },
       ];
       for (const spec of flameSpecs) {
         const geo = track(new THREE.ConeGeometry(spec.r, spec.h, 8));
@@ -301,7 +301,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
         track(
           new THREE.SpriteMaterial({
             map: glowTexture,
-            color: 0xff7a26,
+            color: 0xff6b35,
             transparent: true,
             opacity: 0.45,
             blending: THREE.AdditiveBlending,
@@ -332,7 +332,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
     sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPositions, 3));
     const sparkMat = track(
       new THREE.PointsMaterial({
-        color: 0xffb347,
+        color: 0xfbbf24,
         map: glowTexture,
         size: 0.09,
         transparent: true,
@@ -386,7 +386,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
     );
     const fireflyMat = track(
       new THREE.PointsMaterial({
-        color: 0xc8ff6e,
+        color: 0xfbbf24,
         map: glowTexture,
         size: 0.14,
         transparent: true,

@@ -1,21 +1,48 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import {
+  Montserrat,
+  Oswald,
+  Playfair_Display,
+  Rock_Salt,
+  Uncial_Antiqua,
+} from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const oswald = Oswald({
+  variable: "--font-oswald",
   subsets: ["latin"],
+  weight: ["200", "400", "700"],
+});
+
+const playfair = Playfair_Display({
+  variable: "--font-playfair",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  weight: ["400", "700"],
+});
+
+const uncial = Uncial_Antiqua({
+  variable: "--font-uncial",
+  subsets: ["latin"],
+  weight: "400",
+});
+
+const rockSalt = Rock_Salt({
+  variable: "--font-rock-salt",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
-  title: "Nolo — Escucha el bosque",
+  title: "NOLO CHAVES | Fábrica de Sonidos",
   description:
-    "Una pausa inmersiva: explora en 3D un bosque nocturno con una fogata encendida, escucha el crepitar del fuego y navega libremente desde tu navegador.",
+    "Nolo Chaves. Folk Alternativo desde Pereira, Colombia. El Ciclo del Fuego: Fogata, Corcel, Phoenix. Vive el ritual de la fogata en una experiencia 3D interactiva.",
 };
 
 export default function RootLayout({
@@ -24,9 +51,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" className="scroll-smooth">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${montserrat.variable} ${oswald.variable} ${playfair.variable} ${uncial.variable} ${rockSalt.variable} antialiased`}
       >
         {children}
       </body>
