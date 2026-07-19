@@ -37,7 +37,10 @@ export default function ForestSection() {
   }, []);
 
   useEffect(() => {
+    const onStoke = () => audioRef.current?.stoke();
+    window.addEventListener("nolo:fire-stoke", onStoke);
     return () => {
+      window.removeEventListener("nolo:fire-stoke", onStoke);
       audioRef.current?.dispose();
       audioRef.current = null;
     };
@@ -100,10 +103,10 @@ export default function ForestSection() {
         <div className="pointer-events-none flex items-center gap-3 border border-white/10 bg-black/40 px-4 py-2 backdrop-blur">
           <Move3d className="h-4 w-4 shrink-0 text-nolo-fogata" />
           <span className="hidden font-label text-xs uppercase tracking-widest text-gray-300 sm:inline">
-            Arrastra para mirar · rueda para acercarte al fuego
+            Arrastra para mirar · rueda para acercarte · toca la fogata para avivarla
           </span>
           <span className="font-label text-xs uppercase tracking-widest text-gray-300 sm:hidden">
-            Desliza para mirar · pellizca para acercar
+            Desliza · pellizca · toca el fuego para avivarlo
           </span>
         </div>
         <button
