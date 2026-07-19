@@ -122,6 +122,32 @@ export class CampfireAudio {
     return buffer;
   }
 
+  /** Ráfaga de chasquidos al avivar el fuego (tocar la fogata). */
+  stoke() {
+    if (this.disposed || this.ctx.state !== "running") return;
+    for (let i = 0; i < 8; i++) {
+      const at = this.ctx.currentTime + Math.random() * 0.5;
+      const dur = 0.02 + Math.random() * 0.05;
+
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.makeNoiseBuffer("white", dur);
+
+      const bandpass = this.ctx.createBiquadFilter();
+      bandpass.type = "bandpass";
+      bandpass.frequency.value = 1500 + Math.random() * 3500;
+      bandpass.Q.value = 1.5;
+
+      const gain = this.ctx.createGain();
+      const peak = 0.2 + Math.random() * 0.5;
+      gain.gain.setValueAtTime(peak, at);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + dur);
+
+      src.connect(bandpass).connect(gain).connect(this.master);
+      src.start(at);
+      src.stop(at + dur + 0.01);
+    }
+  }
+
   async resume() {
     if (this.disposed) return;
     await this.ctx.resume();
