@@ -2,6 +2,7 @@
 import SiteNav from "./components/SiteNav";
 import TrilogyTabs from "./components/TrilogyTabs";
 import ForestSection from "./components/ForestSection";
+import RitualSection from "./components/RitualSection";
 
 const WAVE_FOGATA =
   "url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAwIDEyMCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ibm9uZSI+PHBhdGggZD0iTTAgMGgwdjYwaDEyMDBWNDBsLTEyMDAgMjB6IiBmaWxsPSIjZmY2YjM1IiBvcGFjaXR5PSIwLjMiLz48L3N2Zz4=')";
@@ -138,8 +139,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* El Ritual de la Fogata: experiencia 3D interactiva */}
+      {/* Los tres rituales: experiencias 3D interactivas */}
       <ForestSection />
+      <RitualSection variant="corcel" />
+      <RitualSection variant="phoenix" />
 
       {/* Rituales: fechas y trayectoria */}
       <section
