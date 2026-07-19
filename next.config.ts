@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Export estático: genera HTML plano en `out/` para servir directo
+  // desde Cloudflare Pages sin runtime de Node.
+  output: "export",
 };
 
 export default nextConfig;
