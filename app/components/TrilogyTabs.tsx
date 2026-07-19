@@ -1,10 +1,13 @@
 "use client";
 
 import * as Tabs from "@radix-ui/react-tabs";
-import { Play } from "lucide-react";
+import { Pause, Play } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { AlbumId, AlbumPlayer } from "../lib/album-player";
 
 type Album = {
-  id: string;
+  id: AlbumId;
+  ritualHref: string;
   numeral: string;
   tab: string;
   title: string;
@@ -20,6 +23,7 @@ type Album = {
 const ALBUMS: Album[] = [
   {
     id: "fogata",
+    ritualHref: "#fogata-ritual",
     numeral: "I",
     tab: "I. Fogata",
     title: "El Refugio",
@@ -38,6 +42,7 @@ const ALBUMS: Album[] = [
   },
   {
     id: "corcel",
+    ritualHref: "#corcel-ritual",
     numeral: "II",
     tab: "II. Corcel",
     title: "La Batalla",
@@ -56,6 +61,7 @@ const ALBUMS: Album[] = [
   },
   {
     id: "phoenix",
+    ritualHref: "#phoenix-ritual",
     numeral: "III",
     tab: "III. Phoenix",
     title: "Renacer",
@@ -72,8 +78,40 @@ const ALBUMS: Album[] = [
 ];
 
 export default function TrilogyTabs() {
+  const playerRef = useRef<AlbumPlayer | null>(null);
+  const [playing, setPlaying] = useState<{ album: AlbumId; track: number } | null>(
+    null
+  );
+
+  useEffect(() => {
+    return () => {
+      playerRef.current?.dispose();
+      playerRef.current = null;
+    };
+  }, []);
+
+  const togglePlay = async (album: AlbumId, trackIndex: number) => {
+    if (!playerRef.current) {
+      const { AlbumPlayer } = await import("../lib/album-player");
+      playerRef.current = new AlbumPlayer();
+    }
+    if (playing && playing.album === album && playing.track === trackIndex) {
+      playerRef.current.stop();
+      setPlaying(null);
+    } else {
+      await playerRef.current.play(album, trackIndex);
+      setPlaying({ album, track: trackIndex });
+    }
+  };
+
   return (
-    <Tabs.Root defaultValue="fogata">
+    <Tabs.Root
+      defaultValue="fogata"
+      onValueChange={() => {
+        playerRef.current?.stop();
+        setPlaying(null);
+      }}
+    >
       <Tabs.List className="no-scrollbar mb-12 flex overflow-x-auto border-b border-white/10 md:justify-center">
         {ALBUMS.map((album) => (
           <Tabs.Trigger
@@ -103,23 +141,64 @@ export default function TrilogyTabs() {
             </h3>
             <p className="mb-8 italic text-gray-400">{album.quote}</p>
             <ul className="space-y-4">
-              {album.tracks.map((track) => (
-                <li
-                  key={track.name}
-                  className="group/track flex cursor-pointer items-center justify-between p-3 transition-colors hover:bg-white/5"
-                >
-                  <div className="flex items-center gap-4">
-                    <span
-                      className={`flex h-8 w-8 items-center justify-center rounded-full border border-white/20 ${album.trackHover}`}
+              {album.tracks.map((track, trackIndex) => {
+                const isActive =
+                  playing?.album === album.id && playing.track === trackIndex;
+                return (
+                  <li key={track.name}>
+                    <button
+                      onClick={() => togglePlay(album.id, trackIndex)}
+                      className="group/track flex w-full cursor-pointer items-center justify-between p-3 text-left transition-colors hover:bg-white/5"
+                      aria-pressed={isActive}
                     >
-                      <Play className="h-3 w-3 fill-current" />
-                    </span>
-                    <span className="font-label text-sm">{track.name}</span>
-                  </div>
-                  <span className="text-xs text-white/30">{track.duration}</span>
-                </li>
-              ))}
+                      <div className="flex items-center gap-4">
+                        <span
+                          className={`flex h-8 w-8 items-center justify-center rounded-full border ${
+                            isActive
+                              ? `${album.accentText} border-current`
+                              : "border-white/20"
+                          } ${album.trackHover}`}
+                        >
+                          {isActive ? (
+                            <Pause className="h-3 w-3 fill-current" />
+                          ) : (
+                            <Play className="h-3 w-3 fill-current" />
+                          )}
+                        </span>
+                        <span className="font-label text-sm">{track.name}</span>
+                        {isActive && (
+                          <span
+                            className={`flex h-4 items-end gap-[3px] ${album.accentText}`}
+                            aria-hidden
+                          >
+                            {[0, 1, 2].map((bar) => (
+                              <span
+                                key={bar}
+                                className="eq-bar w-[3px] bg-current"
+                                style={{
+                                  height: "100%",
+                                  animationDelay: `${bar * 0.18}s`,
+                                }}
+                              />
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-white/30">{track.duration}</span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
+            <p className="mt-6 text-xs italic text-white/25">
+              Demos generativos ilustrativos — pronto los álbumes completos.
+            </p>
+            <a
+              href={album.ritualHref}
+              className={`mt-4 inline-block font-label text-xs font-bold uppercase tracking-[0.2em] ${album.accentText} hover:underline`}
+            >
+              Vive el Ritual {album.numeral} →
+            </a>
           </div>
           <div className="group relative h-96 overflow-hidden border border-white/10 md:h-auto">
             {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -8,6 +8,10 @@ export class CampfireAudio {
   private ctx: AudioContext;
   private master: GainNode;
   private crackleTimer: number | null = null;
+  private owlTimer: number | null = null;
+  private sizzleTimer: number | null = null;
+  private rainGain: GainNode | null = null;
+  private rainOn = false;
   private disposed = false;
 
   constructor() {
@@ -23,7 +27,102 @@ export class CampfireAudio {
 
     this.buildFireBed();
     this.buildWind();
+    this.buildRain();
     this.scheduleCrackles();
+    this.scheduleOwl();
+  }
+
+  /** Lluvia: sábana de ruido agudo, silenciada hasta activar setRain. */
+  private buildRain() {
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.makeNoiseBuffer("white", 3);
+    src.loop = true;
+
+    const highpass = this.ctx.createBiquadFilter();
+    highpass.type = "highpass";
+    highpass.frequency.value = 1800;
+
+    this.rainGain = this.ctx.createGain();
+    this.rainGain.gain.value = 0;
+
+    src.connect(highpass).connect(this.rainGain).connect(this.master);
+    src.start();
+  }
+
+  /** Activa/desactiva la lluvia: sube la sábana y chisporrotea el fuego. */
+  setRain(on: boolean) {
+    if (this.disposed || !this.rainGain) return;
+    this.rainOn = on;
+    const now = this.ctx.currentTime;
+    this.rainGain.gain.cancelScheduledValues(now);
+    this.rainGain.gain.setValueAtTime(this.rainGain.gain.value, now);
+    this.rainGain.gain.linearRampToValueAtTime(on ? 0.14 : 0, now + 1.5);
+    if (on && this.sizzleTimer === null) this.scheduleSizzles();
+    if (!on && this.sizzleTimer !== null) {
+      window.clearTimeout(this.sizzleTimer);
+      this.sizzleTimer = null;
+    }
+  }
+
+  /** Siseos de gotas cayendo sobre las brasas mientras llueve. */
+  private scheduleSizzles() {
+    const fire = () => {
+      if (this.disposed || !this.rainOn) {
+        this.sizzleTimer = null;
+        return;
+      }
+      if (this.ctx.state === "running") {
+        const now = this.ctx.currentTime;
+        const dur = 0.15 + Math.random() * 0.35;
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.makeNoiseBuffer("white", dur);
+        const bandpass = this.ctx.createBiquadFilter();
+        bandpass.type = "bandpass";
+        bandpass.frequency.value = 4200 + Math.random() * 2000;
+        bandpass.Q.value = 0.8;
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.05 + Math.random() * 0.1, now + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        src.connect(bandpass).connect(gain).connect(this.master);
+        src.start(now);
+        src.stop(now + dur + 0.01);
+      }
+      this.sizzleTimer = window.setTimeout(fire, 400 + Math.random() * 1600);
+    };
+    fire();
+  }
+
+  /** Ululato ocasional de un búho entre los árboles. */
+  private scheduleOwl() {
+    const hoot = () => {
+      if (this.disposed) return;
+      if (this.ctx.state === "running") {
+        const base = this.ctx.currentTime + 0.05;
+        for (const [offset, freq, dur] of [
+          [0, 392, 0.28],
+          [0.42, 330, 0.5],
+        ] as const) {
+          const at = base + offset;
+          const osc = this.ctx.createOscillator();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, at);
+          osc.frequency.exponentialRampToValueAtTime(freq * 0.92, at + dur);
+          const lowpass = this.ctx.createBiquadFilter();
+          lowpass.type = "lowpass";
+          lowpass.frequency.value = 900;
+          const gain = this.ctx.createGain();
+          gain.gain.setValueAtTime(0.0001, at);
+          gain.gain.exponentialRampToValueAtTime(0.06, at + 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+          osc.connect(lowpass).connect(gain).connect(this.master);
+          osc.start(at);
+          osc.stop(at + dur + 0.05);
+        }
+      }
+      this.owlTimer = window.setTimeout(hoot, 14000 + Math.random() * 18000);
+    };
+    this.owlTimer = window.setTimeout(hoot, 8000 + Math.random() * 8000);
   }
 
   /** Rumor grave y continuo de las brasas (ruido browniano filtrado). */
@@ -171,6 +270,8 @@ export class CampfireAudio {
   dispose() {
     this.disposed = true;
     if (this.crackleTimer !== null) window.clearTimeout(this.crackleTimer);
+    if (this.owlTimer !== null) window.clearTimeout(this.owlTimer);
+    if (this.sizzleTimer !== null) window.clearTimeout(this.sizzleTimer);
     this.ctx.close();
   }
 }

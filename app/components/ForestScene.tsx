@@ -84,10 +84,18 @@ function makeNoiseTexture(opts: {
   return tex;
 }
 
-export default function ForestScene({ onReady }: { onReady?: () => void }) {
+export default function ForestScene({
+  onReady,
+  rain = false,
+}: {
+  onReady?: () => void;
+  rain?: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const rainRef = useRef(rain);
+  rainRef.current = rain;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -492,6 +500,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
     const flameUniforms = {
       uTime: { value: 0 },
       uStoke: { value: 0 },
+      uRain: { value: 0 },
     };
     const makeFlame = (radius: number, height: number, colorShift: number) => {
       const geo = track(new THREE.ConeGeometry(radius, height, 14, 10, true));
@@ -511,6 +520,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
             uniform float uTime;
             uniform float uHeight;
             uniform float uStoke;
+            uniform float uRain;
             varying float vH;
             varying float vNoise;
             ${SIMPLEX_2D}
@@ -522,7 +532,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
               float n2 = snoise(vec2(p.z * 2.5 - uTime * 0.8, p.y * 2.4 - uTime * (3.8 * sway)));
               p.x += n * 0.28 * hn * sway;
               p.z += n2 * 0.28 * hn * sway;
-              p.y *= 1.0 + 0.12 * uStoke + n * 0.06 * hn;
+              p.y *= (1.0 + 0.12 * uStoke + n * 0.06 * hn) * (1.0 - uRain * 0.3);
               vH = hn;
               vNoise = n;
               gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
@@ -676,8 +686,252 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
     );
     scene.add(new THREE.Points(fireflyGeo, fireflyMat));
 
+    // ---------- Lluvia ----------
+    const RAIN_N = isCoarse ? 380 : 750;
+    const rainGeo = track(new THREE.BufferGeometry());
+    const rainPositions = new Float32Array(RAIN_N * 3);
+    const rainSpeeds = new Float32Array(RAIN_N);
+    for (let i = 0; i < RAIN_N; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 18;
+      rainPositions[i * 3] = Math.cos(a) * r;
+      rainPositions[i * 3 + 1] = Math.random() * 12;
+      rainPositions[i * 3 + 2] = Math.sin(a) * r;
+      rainSpeeds[i] = 8 + Math.random() * 6;
+    }
+    rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
+    const rainMat = track(
+      new THREE.PointsMaterial({
+        color: 0xaebfd8,
+        size: 0.05,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      })
+    );
+    const rainPoints = new THREE.Points(rainGeo, rainMat);
+    rainPoints.visible = false;
+    scene.add(rainPoints);
+    let rainAmount = 0;
+
+    // ---------- Búho en su árbol ----------
+    const owlHead = new THREE.Group();
+    const owlEyes: THREE.Sprite[] = [];
+    const owlBlink = { next: 4, closing: 0 };
+    {
+      const barkMat = track(
+        new THREE.MeshStandardMaterial({ map: barkTex, roughness: 1 })
+      );
+      const trunk = new THREE.Mesh(
+        track(new THREE.CylinderGeometry(0.16, 0.24, 3.2, 6)),
+        barkMat
+      );
+      trunk.position.set(7.4, 1.6, -6.4);
+      trunk.castShadow = shadowsOn;
+      scene.add(trunk);
+      const crown = new THREE.Mesh(
+        track(new THREE.ConeGeometry(1.1, 2.4, 7)),
+        track(
+          new THREE.MeshStandardMaterial({
+            map: foliageTex,
+            color: 0x9fb39a,
+            roughness: 1,
+          })
+        )
+      );
+      crown.position.set(7.4, 4.2, -6.4);
+      crown.castShadow = shadowsOn;
+      scene.add(crown);
+      // Rama horizontal hacia el claro
+      const branch = new THREE.Mesh(
+        track(new THREE.CylinderGeometry(0.045, 0.07, 1.3, 5)),
+        barkMat
+      );
+      branch.position.set(6.8, 2.3, -6.05);
+      branch.rotation.z = Math.PI / 2.15;
+      branch.rotation.y = 0.5;
+      scene.add(branch);
+
+      const owl = new THREE.Group();
+      owl.position.set(6.35, 2.42, -5.8);
+      const owlMat = track(
+        new THREE.MeshStandardMaterial({ color: 0x4a3826, roughness: 1 })
+      );
+      const body = new THREE.Mesh(track(new THREE.SphereGeometry(0.13, 10, 10)), owlMat);
+      body.scale.set(1, 1.35, 0.9);
+      owl.add(body);
+      const head = new THREE.Mesh(track(new THREE.SphereGeometry(0.095, 10, 10)), owlMat);
+      owlHead.add(head);
+      const tuftGeo = track(new THREE.ConeGeometry(0.025, 0.07, 4));
+      for (const side of [-1, 1]) {
+        const tuft = new THREE.Mesh(tuftGeo, owlMat);
+        tuft.position.set(side * 0.06, 0.09, 0);
+        owlHead.add(tuft);
+        const eye = new THREE.Sprite(
+          track(
+            new THREE.SpriteMaterial({
+              map: glowTexture,
+              color: 0xfbbf24,
+              transparent: true,
+              opacity: 0.9,
+              depthWrite: false,
+            })
+          )
+        );
+        eye.scale.setScalar(0.045);
+        eye.position.set(side * 0.04, 0.015, 0.085);
+        owlHead.add(eye);
+        owlEyes.push(eye);
+      }
+      owlHead.position.y = 0.2;
+      owl.add(owlHead);
+      // Mirando hacia la fogata
+      owl.rotation.y = Math.atan2(-owl.position.x, -owl.position.z);
+      scene.add(owl);
+    }
+
+    // ---------- Ciervo a lo lejos ----------
+    const deer = new THREE.Group();
+    const deerLegs: THREE.Mesh[] = [];
+    {
+      const deerMat = track(
+        new THREE.MeshStandardMaterial({ color: 0x131a24, roughness: 1 })
+      );
+      const body = new THREE.Mesh(track(new THREE.SphereGeometry(0.42, 10, 10)), deerMat);
+      body.scale.set(1.4, 0.85, 0.6);
+      body.position.y = 1.05;
+      deer.add(body);
+      const neck = new THREE.Mesh(
+        track(new THREE.CylinderGeometry(0.09, 0.13, 0.7, 6)),
+        deerMat
+      );
+      neck.position.set(0.52, 1.45, 0);
+      neck.rotation.z = -0.5;
+      deer.add(neck);
+      const head = new THREE.Mesh(track(new THREE.SphereGeometry(0.13, 8, 8)), deerMat);
+      head.scale.set(1.5, 0.9, 0.8);
+      head.position.set(0.72, 1.72, 0);
+      deer.add(head);
+      const antlerGeo = track(new THREE.CylinderGeometry(0.015, 0.03, 0.5, 4));
+      for (const side of [-1, 1]) {
+        const antler = new THREE.Mesh(antlerGeo, deerMat);
+        antler.position.set(0.68, 1.98, side * 0.09);
+        antler.rotation.z = 0.4;
+        antler.rotation.x = side * 0.5;
+        deer.add(antler);
+        const tine = new THREE.Mesh(antlerGeo, deerMat);
+        tine.scale.setScalar(0.6);
+        tine.position.set(0.62, 2.02, side * 0.14);
+        tine.rotation.z = -0.3;
+        tine.rotation.x = side * 0.9;
+        deer.add(tine);
+      }
+      const legGeo = track(new THREE.CylinderGeometry(0.035, 0.05, 0.95, 5));
+      for (const [lx, lz] of [
+        [0.42, 0.16],
+        [0.42, -0.16],
+        [-0.42, 0.16],
+        [-0.42, -0.16],
+      ]) {
+        const leg = new THREE.Mesh(legGeo, deerMat);
+        leg.position.set(lx, 0.48, lz);
+        deer.add(leg);
+        deerLegs.push(leg);
+      }
+      scene.add(deer);
+    }
+
+    // ---------- Humo que forma el wordmark NOLO al avivar ----------
+    const WORD_N = 380;
+    const wordTargets: THREE.Vector3[] = [];
+    const wordGeo = track(new THREE.BufferGeometry());
+    const wordPositions = new Float32Array(WORD_N * 3);
+    const wordVel = new Float32Array(WORD_N * 3);
+    wordGeo.setAttribute("position", new THREE.BufferAttribute(wordPositions, 3));
+    const wordMat = track(
+      new THREE.PointsMaterial({
+        map: glowTexture,
+        color: 0xb9bfca,
+        size: 0.11,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      })
+    );
+    const wordPoints = new THREE.Points(wordGeo, wordMat);
+    wordPoints.visible = false;
+    scene.add(wordPoints);
+    const wordState = { phase: "idle" as "idle" | "gather" | "hold" | "disperse", t: 0 };
+    const wordWorldTargets: THREE.Vector3[] = Array.from(
+      { length: WORD_N },
+      () => new THREE.Vector3()
+    );
+    {
+      // "NOLO" en trazo grueso: legible incluso formado por puntos de humo
+      const w = 240;
+      const h = 72;
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const g = canvas.getContext("2d")!;
+      g.font = "900 62px Arial, sans-serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillStyle = "#fff";
+      g.fillText("NOLO", w / 2, h / 2 + 4);
+      const data = g.getImageData(0, 0, w, h).data;
+      const all: [number, number][] = [];
+      for (let y = 0; y < h; y += 2) {
+        for (let x = 0; x < w; x += 2) {
+          if (data[(y * w + x) * 4 + 3] > 100) all.push([x, y]);
+        }
+      }
+      for (let i = 0; i < WORD_N && all.length > 0; i++) {
+        const [x, y] = all[Math.floor(Math.random() * all.length)];
+        wordTargets.push(
+          new THREE.Vector3(
+            (x / w - 0.5) * 4.4 + (Math.random() - 0.5) * 0.04,
+            (0.5 - y / h) * 4.4 * (h / w) + (Math.random() - 0.5) * 0.04,
+            0
+          )
+        );
+      }
+    }
+    const startWordSmoke = () => {
+      if (wordTargets.length === 0 || wordState.phase !== "idle") return;
+      // Orienta el wordmark hacia la cámara (solo giro horizontal)
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+      right.y = 0;
+      right.normalize();
+      const center = new THREE.Vector3(0, 3.0, 0);
+      for (let i = 0; i < WORD_N; i++) {
+        const target = wordTargets[i % wordTargets.length];
+        wordWorldTargets[i]
+          .copy(center)
+          .addScaledVector(right, target.x)
+          .add(new THREE.Vector3(0, target.y, 0));
+        wordPositions[i * 3] = (Math.random() - 0.5) * 0.5;
+        wordPositions[i * 3 + 1] = 1.2 + Math.random() * 0.5;
+        wordPositions[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+        wordVel[i * 3] = (Math.random() - 0.5) * 0.4;
+        wordVel[i * 3 + 1] = 0.4 + Math.random() * 0.5;
+        wordVel[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+      }
+      wordState.phase = "gather";
+      wordState.t = 0;
+      wordPoints.visible = true;
+    };
+
     // ---------- Avivar la fogata al tocarla ----------
     const stoke = { value: 0 };
+
+    const sputter = { value: 0 };
+
+    // La fogata late con la música de la trilogía
+    const onMusicBeat = () => {
+      stoke.value = Math.max(stoke.value, 0.3);
+    };
+    window.addEventListener("nolo:music-beat", onMusicBeat);
     const raycaster = new THREE.Raycaster();
     const fireHitbox = new THREE.Mesh(
       track(new THREE.SphereGeometry(1.3, 8, 8)),
@@ -707,6 +961,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
         for (let i = 0; i < SPARKS; i++) {
           if (Math.random() < 0.6) resetSpark(i, true);
         }
+        startWordSmoke();
         window.dispatchEvent(new CustomEvent("nolo:fire-stoke"));
       }
     };
@@ -727,11 +982,35 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
       controls.update();
 
       stoke.value = Math.max(0, stoke.value - dt * 0.45);
+
+      // Transición de lluvia y chisporroteo del fuego
+      const rainTarget = rainRef.current ? 1 : 0;
+      rainAmount += (rainTarget - rainAmount) * Math.min(1, dt * 0.8);
+      rainPoints.visible = rainAmount > 0.02;
+      rainMat.opacity = 0.45 * rainAmount;
+      (scene.fog as THREE.FogExp2).density = 0.026 + rainAmount * 0.012;
+      starLayers[0].opacity = 0.85 * (1 - rainAmount * 0.85);
+      if (rainAmount > 0.02) {
+        for (let i = 0; i < RAIN_N; i++) {
+          rainPositions[i * 3 + 1] -= rainSpeeds[i] * dt;
+          if (rainPositions[i * 3 + 1] < 0) {
+            rainPositions[i * 3 + 1] = 12;
+          }
+        }
+        rainGeo.attributes.position.needsUpdate = true;
+      }
+      if (sputter.value > 0) sputter.value = Math.max(0, sputter.value - dt * 4);
+      if (rainAmount > 0.4 && Math.random() < dt * 1.5) sputter.value = 1;
+
       flameUniforms.uTime.value = t;
       flameUniforms.uStoke.value = stoke.value;
+      flameUniforms.uRain.value = rainAmount * (0.7 + sputter.value * 0.5);
 
-      // Luz del fuego: parpadeo natural + avivado
-      const stokeBoost = 1 + stoke.value * 0.7;
+      // Luz del fuego: parpadeo natural + avivado − lluvia
+      const stokeBoost =
+        (1 + stoke.value * 0.7) *
+        (1 - rainAmount * 0.35) *
+        (1 - sputter.value * 0.4);
       fireLight.intensity =
         (30 + Math.sin(t * 11) * 3 + Math.sin(t * 23 + 1.3) * 2 + Math.random() * 2) *
         stokeBoost;
@@ -790,12 +1069,85 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
       }
       fp.needsUpdate = true;
 
-      // Titileo sutil de estrellas
-      starLayers[1].opacity = 0.75 + Math.sin(t * 2.1) * 0.2;
+      // Titileo sutil de estrellas (apagadas bajo la lluvia)
+      starLayers[1].opacity =
+        (0.75 + Math.sin(t * 2.1) * 0.2) * (1 - rainAmount * 0.85);
 
-      // Estrella fugaz
+      // Búho: giro de cabeza y parpadeo
+      owlHead.rotation.y = Math.sin(t * 0.35) * 0.7 + Math.sin(t * 0.13) * 0.3;
+      owlBlink.next -= dt;
+      if (owlBlink.next <= 0) {
+        owlBlink.closing = 0.16;
+        owlBlink.next = 3 + Math.random() * 5;
+      }
+      if (owlBlink.closing > 0) {
+        owlBlink.closing -= dt;
+        for (const eye of owlEyes) eye.scale.set(0.045, 0.008, 1);
+      } else {
+        for (const eye of owlEyes) eye.scale.set(0.045, 0.045, 1);
+      }
+
+      // Ciervo: paseo lento entre los árboles, pastando a ratos
+      {
+        const stroll = t * 0.08;
+        const grazing = Math.sin(t * 0.11) > 0.45;
+        deer.position.set(
+          -17 + Math.cos(stroll) * 3.5,
+          0,
+          -13 + Math.sin(stroll) * 3.5
+        );
+        deer.rotation.y = -stroll + Math.PI / 2 + Math.PI;
+        const swing = grazing ? 0 : Math.sin(t * 2.2) * 0.25;
+        deerLegs.forEach((leg, i) => {
+          leg.rotation.x = swing * (i % 2 === 0 ? 1 : -1);
+        });
+        // Baja la cabeza cuando pasta
+        deer.rotation.z = grazing ? -0.12 : 0;
+      }
+
+      // Humo del wordmark NOLO
+      if (wordState.phase !== "idle") {
+        wordState.t += dt;
+        const wp = wordGeo.attributes.position as THREE.BufferAttribute;
+        if (wordState.phase === "gather" || wordState.phase === "hold") {
+          const k = Math.min(1, dt * (wordState.phase === "gather" ? 3.2 : 6));
+          for (let i = 0; i < WORD_N; i++) {
+            const target = wordWorldTargets[i];
+            wordPositions[i * 3] += (target.x - wordPositions[i * 3]) * k;
+            wordPositions[i * 3 + 1] +=
+              (target.y - wordPositions[i * 3 + 1]) * k +
+              Math.sin(t * 3 + i) * 0.0015;
+            wordPositions[i * 3 + 2] += (target.z - wordPositions[i * 3 + 2]) * k;
+          }
+          if (wordState.phase === "gather") {
+            wordMat.opacity = Math.min(0.9, wordState.t * 1.1);
+            if (wordState.t > 1.3) {
+              wordState.phase = "hold";
+              wordState.t = 0;
+            }
+          } else if (wordState.t > 2.2) {
+            wordState.phase = "disperse";
+            wordState.t = 0;
+          }
+        } else {
+          for (let i = 0; i < WORD_N; i++) {
+            wordPositions[i * 3] += wordVel[i * 3] * dt;
+            wordPositions[i * 3 + 1] += wordVel[i * 3 + 1] * dt;
+            wordPositions[i * 3 + 2] += wordVel[i * 3 + 2] * dt;
+          }
+          wordMat.opacity = Math.max(0, 0.9 - wordState.t * 0.8);
+          if (wordState.t > 1.3) {
+            wordState.phase = "idle";
+            wordPoints.visible = false;
+          }
+        }
+        wp.needsUpdate = true;
+      }
+
+      // Estrella fugaz (no aparece bajo la lluvia)
       shootingState.t += dt;
       const starMat = shootingStar.material as THREE.MeshBasicMaterial;
+      if (rainAmount > 0.3 && !shootingState.active) shootingState.t = 0;
       if (!shootingState.active && shootingState.t > shootingState.next) {
         shootingState.active = true;
         shootingState.t = 0;
@@ -873,6 +1225,7 @@ export default function ForestScene({ onReady }: { onReady?: () => void }) {
       document.removeEventListener("visibilitychange", onVisibility);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("nolo:music-beat", onMusicBeat);
       controls.removeEventListener("start", stopAutoRotate);
       controls.dispose();
       disposables.forEach((d) => d.dispose());

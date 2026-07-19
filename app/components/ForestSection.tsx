@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import { Flame, Volume2, VolumeX, Move3d } from "lucide-react";
+import { CloudRain, Flame, Volume2, VolumeX, Move3d } from "lucide-react";
 import type { CampfireAudio } from "../lib/campfire-audio";
 
 const ForestScene = dynamic(() => import("./ForestScene"), { ssr: false });
@@ -19,6 +19,7 @@ export default function ForestSection() {
   const [mounted, setMounted] = useState(false);
   const [ready, setReady] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
+  const [rainOn, setRainOn] = useState(false);
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -56,8 +57,15 @@ export default function ForestSection() {
       setSoundOn(false);
     } else {
       await audioRef.current.resume();
+      audioRef.current.setRain(rainOn);
       setSoundOn(true);
     }
+  };
+
+  const toggleRain = () => {
+    const next = !rainOn;
+    setRainOn(next);
+    audioRef.current?.setRain(next);
   };
 
   return (
@@ -67,7 +75,7 @@ export default function ForestSection() {
       aria-label="El ritual de la fogata: bosque interactivo en 3D"
       className="relative h-[100svh] w-full overflow-hidden bg-nolo-void"
     >
-      {mounted && <ForestScene onReady={() => setReady(true)} />}
+      {mounted && <ForestScene onReady={() => setReady(true)} rain={rainOn} />}
 
       {/* Pantalla de carga */}
       <div
@@ -109,25 +117,39 @@ export default function ForestSection() {
             Desliza · pellizca · toca el fuego para avivarlo
           </span>
         </div>
-        <button
-          onClick={toggleSound}
-          aria-pressed={soundOn}
-          className={`flex items-center gap-3 border px-6 py-3 font-label text-xs font-bold uppercase tracking-[0.2em] backdrop-blur transition-colors ${
-            soundOn
-              ? "border-nolo-fogata bg-nolo-fogata/20 text-nolo-fogata"
-              : "border-white/30 bg-black/40 text-white hover:bg-white hover:text-black"
-          }`}
-        >
-          {soundOn ? (
-            <>
-              <Volume2 className="h-4 w-4" /> Silenciar fogata
-            </>
-          ) : (
-            <>
-              <VolumeX className="h-4 w-4" /> Escuchar la fogata
-            </>
-          )}
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={toggleSound}
+            aria-pressed={soundOn}
+            className={`flex items-center gap-3 border px-6 py-3 font-label text-xs font-bold uppercase tracking-[0.2em] backdrop-blur transition-colors ${
+              soundOn
+                ? "border-nolo-fogata bg-nolo-fogata/20 text-nolo-fogata"
+                : "border-white/30 bg-black/40 text-white hover:bg-white hover:text-black"
+            }`}
+          >
+            {soundOn ? (
+              <>
+                <Volume2 className="h-4 w-4" /> Silenciar fogata
+              </>
+            ) : (
+              <>
+                <VolumeX className="h-4 w-4" /> Escuchar la fogata
+              </>
+            )}
+          </button>
+          <button
+            onClick={toggleRain}
+            aria-pressed={rainOn}
+            className={`flex items-center gap-3 border px-6 py-3 font-label text-xs font-bold uppercase tracking-[0.2em] backdrop-blur transition-colors ${
+              rainOn
+                ? "border-nolo-corcel bg-nolo-corcel/30 text-blue-200"
+                : "border-white/30 bg-black/40 text-white hover:bg-white hover:text-black"
+            }`}
+          >
+            <CloudRain className="h-4 w-4" />
+            {rainOn ? "Despejar el cielo" : "Invocar la lluvia"}
+          </button>
+        </div>
       </div>
     </section>
   );
