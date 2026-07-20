@@ -3,6 +3,10 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 /**
  * Escenas rituales de los álbumes II y III:
@@ -55,6 +59,22 @@ export default function RitualScene({
       220
     );
     camera.position.set(isCorcel ? 9 : 7, 3.2, isCorcel ? 11 : 9);
+
+    // Bloom en desktop: la luna y el fuego resplandecen
+    let composer: EffectComposer | null = null;
+    let bloomPass: UnrealBloomPass | null = null;
+    if (!isCoarse) {
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(container.clientWidth, container.clientHeight),
+        isCorcel ? 0.35 : 0.7,
+        0.6,
+        isCorcel ? 0.75 : 0.55
+      );
+      composer.addPass(bloomPass);
+      composer.addPass(new OutputPass());
+    }
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, isCorcel ? 1 : 2.4, 0);
@@ -536,7 +556,8 @@ export default function RitualScene({
       }
       trailGeo.attributes.position.needsUpdate = true;
 
-      renderer.render(scene, camera);
+      if (composer) composer.render();
+      else renderer.render(scene, camera);
       if (!notifiedReady) {
         notifiedReady = true;
         onReadyRef.current?.();
@@ -575,6 +596,7 @@ export default function RitualScene({
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      composer?.setSize(w, h);
     });
     resizeObserver.observe(container);
 
@@ -588,6 +610,8 @@ export default function RitualScene({
       controls.removeEventListener("start", stopAutoRotate);
       controls.dispose();
       disposables.forEach((d) => d.dispose());
+      bloomPass?.dispose();
+      composer?.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };

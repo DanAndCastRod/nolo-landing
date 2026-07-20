@@ -77,6 +77,7 @@ export default function RitualSection({
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-nolo-void to-transparent" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24 bg-gradient-to-t from-nolo-void to-transparent" />
+      <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(0,0,0,0.5)_100%)]" />
 
       <div className="pointer-events-none absolute inset-x-0 top-24 z-20 flex flex-col items-center gap-3 px-6 text-center">
         <span className={`font-label text-xs uppercase tracking-widest ${content.accent}`}>

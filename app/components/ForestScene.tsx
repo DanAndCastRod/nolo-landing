@@ -3,6 +3,10 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 /**
  * Bosque nocturno interactivo: fogata con llamas de shader, chispas y humo,
@@ -35,6 +39,16 @@ float snoise(vec2 v){
   g.x  = a0.x  * x0.x  + h.x  * x0.y;
   g.yz = a0.yz * x12.xz + h.yz * x12.yw;
   return 130.0 * dot(m, g);
+}
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * snoise(p);
+    p *= 2.1;
+    a *= 0.5;
+  }
+  return v;
 }
 `;
 
@@ -123,6 +137,10 @@ export default function ForestScene({
     }
     container.appendChild(renderer.domElement);
 
+    // Bloom cinematográfico en desktop: el fuego y las luces resplandecen
+    let composer: EffectComposer | null = null;
+    let bloomPass: UnrealBloomPass | null = null;
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x05080f);
     scene.fog = new THREE.FogExp2(0x0a1120, 0.026);
@@ -134,6 +152,20 @@ export default function ForestScene({
       200
     );
     camera.position.set(5.5, 2.8, 7);
+
+    if (!isCoarse) {
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(container.clientWidth, container.clientHeight),
+        0.3,
+        0.45,
+        0.85
+      );
+      composer.addPass(bloomPass);
+      composer.addPass(new OutputPass());
+      renderer.toneMappingExposure = 1.05;
+    }
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 1.1, 0);
@@ -204,6 +236,77 @@ export default function ForestScene({
     );
     foliageTex.repeat.set(3, 2);
 
+    // Relieve fino del suelo (bump map en escala de grises)
+    const groundBump = track(
+      makeNoiseTexture({
+        base: "#808080",
+        spots: [
+          { color: "#4a4a4a", count: 400, min: 1, max: 6, alpha: 0.5 },
+          { color: "#b8b8b8", count: 300, min: 1, max: 4, alpha: 0.5 },
+        ],
+      })
+    );
+    groundBump.colorSpace = THREE.NoColorSpace;
+    groundBump.repeat.set(26, 26);
+
+    const glowTexture = (() => {
+      const size = 128;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const g = canvas.getContext("2d")!;
+      const grad = g.createRadialGradient(
+        size / 2, size / 2, 0,
+        size / 2, size / 2, size / 2
+      );
+      grad.addColorStop(0, "rgba(255,255,255,1)");
+      grad.addColorStop(0.35, "rgba(255,255,255,0.35)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, size, size);
+      return track(new THREE.CanvasTexture(canvas));
+    })();
+
+    // Nube suave para el humo (manchas superpuestas)
+    const smokeTexture = (() => {
+      const size = 128;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const g = canvas.getContext("2d")!;
+      for (let i = 0; i < 14; i++) {
+        const x = 30 + Math.random() * 68;
+        const y = 30 + Math.random() * 68;
+        const r = 14 + Math.random() * 34;
+        const grad = g.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, "rgba(255,255,255,0.28)");
+        grad.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = grad;
+        g.fillRect(0, 0, size, size);
+      }
+      return track(new THREE.CanvasTexture(canvas));
+    })();
+
+    // Luna con mares y cráteres
+    const moonTexture = (() => {
+      const size = 128;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const g = canvas.getContext("2d")!;
+      g.fillStyle = "#e9edf7";
+      g.fillRect(0, 0, size, size);
+      for (let i = 0; i < 26; i++) {
+        g.globalAlpha = 0.1 + Math.random() * 0.12;
+        g.fillStyle = "#8e9ab8";
+        const r = 3 + Math.random() * 15;
+        g.beginPath();
+        g.arc(Math.random() * size, Math.random() * size, r, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.globalAlpha = 1;
+      const tex = track(new THREE.CanvasTexture(canvas));
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    })();
+
     // ---------- Luces ----------
     scene.add(new THREE.HemisphereLight(0x2a3b6e, 0x0c1408, 0.55));
 
@@ -247,38 +350,44 @@ export default function ForestScene({
       const mat = track(
         new THREE.PointsMaterial({
           color: 0xcdd8ff,
+          map: glowTexture,
           size: layer.size,
           sizeAttenuation: true,
           fog: false,
           transparent: true,
           opacity: layer.opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
         })
       );
       starLayers.push(mat);
       scene.add(new THREE.Points(geo, mat));
     }
 
-    const glowTexture = (() => {
-      const size = 128;
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = size;
-      const g = canvas.getContext("2d")!;
-      const grad = g.createRadialGradient(
-        size / 2, size / 2, 0,
-        size / 2, size / 2, size / 2
+    // Vía láctea: banda tenue cruzando el cielo
+    {
+      const band = new THREE.Sprite(
+        track(
+          new THREE.SpriteMaterial({
+            map: smokeTexture,
+            color: 0x9fb2e8,
+            transparent: true,
+            opacity: 0.1,
+            fog: false,
+            depthWrite: false,
+            rotation: 0.5,
+          })
+        )
       );
-      grad.addColorStop(0, "rgba(255,255,255,1)");
-      grad.addColorStop(0.35, "rgba(255,255,255,0.35)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
-      g.fillStyle = grad;
-      g.fillRect(0, 0, size, size);
-      return track(new THREE.CanvasTexture(canvas));
-    })();
+      band.scale.set(220, 70, 1);
+      band.position.set(20, 70, -90);
+      scene.add(band);
+    }
 
     {
       const moon = new THREE.Mesh(
         track(new THREE.SphereGeometry(4, 24, 24)),
-        track(new THREE.MeshBasicMaterial({ color: 0xe8eeff, fog: false }))
+        track(new THREE.MeshBasicMaterial({ map: moonTexture, fog: false }))
       );
       moon.position.set(-55, 45, -70);
       scene.add(moon);
@@ -337,7 +446,12 @@ export default function ForestScene({
       }
       geo.computeVertexNormals();
       const mat = track(
-        new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1 })
+        new THREE.MeshStandardMaterial({
+          map: groundTex,
+          bumpMap: groundBump,
+          bumpScale: 0.6,
+          roughness: 1,
+        })
       );
       const ground = new THREE.Mesh(geo, mat);
       ground.rotation.x = -Math.PI / 2;
@@ -389,7 +503,25 @@ export default function ForestScene({
         { radius: 0.9, height: 1.5, y: 1.75, tint: 0xb5c4b0 },
         { radius: 0.62, height: 1.3, y: 2.6, tint: 0xd8e2d2 },
       ].map((l) => {
-        const geo = track(new THREE.ConeGeometry(l.radius, l.height, 7));
+        const geo = track(new THREE.ConeGeometry(l.radius, l.height, 9, 3));
+        // Silueta irregular: cada anillo de vértices se desplaza con ruido
+        {
+          const pos = geo.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i);
+            const z = pos.getZ(i);
+            const r = Math.hypot(x, z);
+            if (r > 0.01) {
+              const wobble =
+                1 +
+                Math.sin(x * 9.7 + z * 7.3) * 0.09 +
+                Math.sin(z * 12.1 - x * 5.9) * 0.07;
+              pos.setX(i, x * wobble);
+              pos.setZ(i, z * wobble);
+            }
+          }
+          geo.computeVertexNormals();
+        }
         geo.translate(0, l.y + l.height / 2, 0);
         const mat = track(
           new THREE.MeshStandardMaterial({
@@ -405,21 +537,35 @@ export default function ForestScene({
 
       const m = new THREE.Matrix4();
       const q = new THREE.Quaternion();
-      const up = new THREE.Vector3(0, 1, 0);
+      const e = new THREE.Euler();
+      const tint = new THREE.Color();
       for (let i = 0; i < TREES; i++) {
         const angle = Math.random() * Math.PI * 2;
         const radius = 15 + Math.pow(Math.random(), 0.7) * 40;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
         const s = 1 + Math.random() * 1.6;
-        q.setFromAxisAngle(up, Math.random() * Math.PI * 2);
+        // Giro aleatorio + inclinación leve, como árboles reales
+        e.set(
+          (Math.random() - 0.5) * 0.09,
+          Math.random() * Math.PI * 2,
+          (Math.random() - 0.5) * 0.09
+        );
+        q.setFromEuler(e);
         m.compose(
           new THREE.Vector3(x, 0, z),
           q,
           new THREE.Vector3(s * (0.8 + Math.random() * 0.4), s, s * (0.8 + Math.random() * 0.4))
         );
         trunks.setMatrixAt(i, m);
-        layers.forEach((layer) => layer.setMatrixAt(i, m));
+        // Variación de tono por árbol para romper la uniformidad
+        const shade = 0.7 + Math.random() * 0.55;
+        tint.setScalar(shade);
+        trunks.setColorAt(i, tint);
+        layers.forEach((layer) => {
+          layer.setMatrixAt(i, m);
+          layer.setColorAt(i, tint);
+        });
       }
       scene.add(trunks, ...layers);
     }
@@ -496,72 +642,124 @@ export default function ForestScene({
       scene.add(embers);
     }
 
-    // ---------- Llamas con shader (ruido simplex en vértices) ----------
+    // ---------- Brasas incandescentes bajo la leña ----------
+    let coalsMat: THREE.MeshStandardMaterial;
+    {
+      const COALS = 16;
+      const coalGeo = track(new THREE.DodecahedronGeometry(0.09, 0));
+      coalsMat = track(
+        new THREE.MeshStandardMaterial({
+          color: 0x1a0d08,
+          roughness: 1,
+          emissive: 0xff3d00,
+          emissiveIntensity: 1.6,
+        })
+      );
+      const coals = new THREE.InstancedMesh(coalGeo, coalsMat, COALS);
+      const m = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      for (let i = 0; i < COALS; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.random() * 0.42;
+        q.setFromEuler(
+          new THREE.Euler(Math.random() * 3, Math.random() * 3, Math.random() * 3)
+        );
+        const s = 0.6 + Math.random() * 1.1;
+        m.compose(
+          new THREE.Vector3(Math.cos(a) * r, 0.1 + Math.random() * 0.1, Math.sin(a) * r),
+          q,
+          new THREE.Vector3(s, s * 0.7, s)
+        );
+        coals.setMatrixAt(i, m);
+      }
+      scene.add(coals);
+
+      // Ramas caídas dispersas por el claro
+      const twigGeo = track(new THREE.CylinderGeometry(0.025, 0.04, 1, 5));
+      const twigMat = track(
+        new THREE.MeshStandardMaterial({ map: barkTex, color: 0x6b5138, roughness: 1 })
+      );
+      const TWIGS = 10;
+      const twigs = new THREE.InstancedMesh(twigGeo, twigMat, TWIGS);
+      for (let i = 0; i < TWIGS; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 2.5 + Math.random() * 9;
+        q.setFromEuler(
+          new THREE.Euler(Math.PI / 2 + (Math.random() - 0.5) * 0.2, 0, Math.random() * Math.PI)
+        );
+        const s = 0.6 + Math.random() * 1.2;
+        m.compose(
+          new THREE.Vector3(Math.cos(a) * r, 0.04, Math.sin(a) * r),
+          q,
+          new THREE.Vector3(s, s, s)
+        );
+        twigs.setMatrixAt(i, m);
+      }
+      scene.add(twigs);
+    }
+
+    // ---------- Fuego realista: quads cruzados con ruido FBM ----------
     const flameUniforms = {
       uTime: { value: 0 },
       uStoke: { value: 0 },
       uRain: { value: 0 },
     };
-    const makeFlame = (radius: number, height: number, colorShift: number) => {
-      const geo = track(new THREE.ConeGeometry(radius, height, 14, 10, true));
-      geo.translate(0, height / 2, 0);
-      const mat = track(
+    {
+      const fireMat = track(
         new THREE.ShaderMaterial({
           transparent: true,
           depthWrite: false,
           blending: THREE.AdditiveBlending,
           side: THREE.DoubleSide,
-          uniforms: {
-            ...flameUniforms,
-            uHeight: { value: height },
-            uShift: { value: colorShift },
-          },
+          uniforms: flameUniforms,
           vertexShader: /* glsl */ `
             uniform float uTime;
-            uniform float uHeight;
-            uniform float uStoke;
-            uniform float uRain;
-            varying float vH;
-            varying float vNoise;
-            ${SIMPLEX_2D}
+            varying vec2 vUv;
             void main() {
+              vUv = uv;
               vec3 p = position;
-              float hn = clamp(p.y / uHeight, 0.0, 1.0);
-              float sway = 1.0 + uStoke * 0.6;
-              float n = snoise(vec2(p.x * 2.5 + uTime * 0.6, p.y * 2.0 - uTime * (3.0 * sway)));
-              float n2 = snoise(vec2(p.z * 2.5 - uTime * 0.8, p.y * 2.4 - uTime * (3.8 * sway)));
-              p.x += n * 0.28 * hn * sway;
-              p.z += n2 * 0.28 * hn * sway;
-              p.y *= (1.0 + 0.12 * uStoke + n * 0.06 * hn) * (1.0 - uRain * 0.3);
-              vH = hn;
-              vNoise = n;
+              // Vaivén suave del cuerpo de la llama
+              p.x += sin(uTime * 2.1 + uv.y * 3.5) * 0.06 * uv.y;
+              p.z += cos(uTime * 1.7 + uv.y * 2.8) * 0.05 * uv.y;
               gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
             }
           `,
           fragmentShader: /* glsl */ `
-            uniform float uShift;
-            varying float vH;
-            varying float vNoise;
+            uniform float uTime;
+            uniform float uStoke;
+            uniform float uRain;
+            varying vec2 vUv;
+            ${SIMPLEX_2D}
             void main() {
-              vec3 core = vec3(1.0, 0.86, 0.45);
-              vec3 mid = vec3(1.0, 0.42, 0.21);
-              vec3 tip = vec3(0.85, 0.24, 0.10);
-              vec3 col = mix(core, mid, smoothstep(0.05, 0.5 + uShift, vH));
-              col = mix(col, tip, smoothstep(0.4 + uShift, 1.0, vH));
-              float alpha = (1.0 - vH) * (0.75 + vNoise * 0.25);
-              alpha *= smoothstep(0.0, 0.08, vH) * 0.9;
-              gl_FragColor = vec4(col, alpha);
+              vec2 uv = vUv;
+              float x = uv.x * 2.0 - 1.0;
+              float speed = 1.5 + uStoke * 0.9;
+              // Dos octavas de ruido ascendente: la lengua de fuego
+              float n = fbm(vec2(uv.x * 3.2, uv.y * 2.1 - uTime * speed));
+              n += 0.45 * fbm(vec2(uv.x * 7.5 + 3.7, uv.y * 4.6 - uTime * speed * 1.8));
+              float body = (1.0 - uv.y) * (1.0 + uStoke * 0.3) * (1.0 - uRain * 0.32);
+              float shape = body - abs(x) * (0.5 + 1.45 * uv.y) + n * 0.42;
+              float d = smoothstep(0.02, 0.42, shape);
+              if (d <= 0.01) discard;
+              vec3 deep = vec3(0.62, 0.07, 0.02);
+              vec3 mid = vec3(1.0, 0.42, 0.08);
+              vec3 core = vec3(1.0, 0.88, 0.5);
+              vec3 col = mix(deep, mid, smoothstep(0.08, 0.5, d));
+              col = mix(col, core, smoothstep(0.6, 0.95, d));
+              gl_FragColor = vec4(col, d * 0.55);
             }
           `,
         })
       );
-      const flame = new THREE.Mesh(geo, mat);
-      flame.position.y = 0.28;
-      scene.add(flame);
-      return flame;
-    };
-    makeFlame(0.5, 1.7, 0.0);
-    makeFlame(0.3, 1.15, -0.15);
+      const fireGeo = track(new THREE.PlaneGeometry(1.2, 1.85, 6, 10));
+      fireGeo.translate(0, 0.92, 0);
+      for (let i = 0; i < 2; i++) {
+        const quad = new THREE.Mesh(fireGeo, fireMat);
+        quad.position.y = 0.18;
+        quad.rotation.y = (i / 2) * Math.PI * 0.5 + 0.4;
+        scene.add(quad);
+      }
+    }
 
     {
       const glow = new THREE.Sprite(
@@ -570,7 +768,7 @@ export default function ForestScene({
             map: glowTexture,
             color: 0xff6b35,
             transparent: true,
-            opacity: 0.45,
+            opacity: 0.28,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
           })
@@ -614,18 +812,26 @@ export default function ForestScene({
     // ---------- Humo ----------
     const SMOKE = 26;
     const smokeGroup = new THREE.Group();
-    const smokeMat = track(
-      new THREE.SpriteMaterial({
-        map: glowTexture,
-        color: 0x8a8f9c,
-        transparent: true,
-        opacity: 0.14,
-        depthWrite: false,
+    // Varios materiales con rotaciones propias: el humo gira y se retuerce
+    const smokeMats: { mat: THREE.SpriteMaterial; spin: number }[] = Array.from(
+      { length: 5 },
+      () => ({
+        mat: track(
+          new THREE.SpriteMaterial({
+            map: smokeTexture,
+            color: 0x9298a4,
+            transparent: true,
+            opacity: 0.16,
+            depthWrite: false,
+            rotation: Math.random() * Math.PI * 2,
+          })
+        ),
+        spin: (Math.random() - 0.5) * 0.5,
       })
     );
     const smokeSprites: { sprite: THREE.Sprite; seed: number }[] = [];
     for (let i = 0; i < SMOKE; i++) {
-      const sprite = new THREE.Sprite(smokeMat);
+      const sprite = new THREE.Sprite(smokeMats[i % smokeMats.length].mat);
       const seed = Math.random();
       sprite.position.set(0, 1 + seed * 4, 0);
       smokeGroup.add(sprite);
@@ -1018,6 +1224,13 @@ export default function ForestScene({
       fireLight.position.z = Math.cos(t * 6.1) * 0.06;
       emberLight.intensity = (5 + Math.sin(t * 5) * 1.2) * stokeBoost;
       embersMat.opacity = 0.7 + Math.sin(t * 4) * 0.12 + stoke.value * 0.25;
+      coalsMat.emissiveIntensity =
+        (1.3 + Math.sin(t * 6.3) * 0.35 + Math.sin(t * 15.7) * 0.2) * stokeBoost;
+
+      // El humo gira lentamente
+      for (const { mat, spin } of smokeMats) {
+        mat.rotation += spin * dt;
+      }
 
       // Chispas que suben y se reinician
       for (let i = 0; i < SPARKS; i++) {
@@ -1172,7 +1385,8 @@ export default function ForestScene({
         }
       }
 
-      renderer.render(scene, camera);
+      if (composer) composer.render();
+      else renderer.render(scene, camera);
 
       if (!notifiedReady) {
         notifiedReady = true;
@@ -1213,6 +1427,7 @@ export default function ForestScene({
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      composer?.setSize(w, h);
     });
     resizeObserver.observe(container);
 
@@ -1229,6 +1444,8 @@ export default function ForestScene({
       controls.removeEventListener("start", stopAutoRotate);
       controls.dispose();
       disposables.forEach((d) => d.dispose());
+      bloomPass?.dispose();
+      composer?.dispose();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
