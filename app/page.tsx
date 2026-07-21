@@ -42,15 +42,12 @@ export default function Home() {
 
         <div className="relative z-10 mt-16 flex h-full flex-col items-center justify-center px-4 text-center md:mt-0">
           <div className="flex flex-col items-center">
-            <div className="relative z-20 w-full max-w-[260px] transition-transform duration-500 hover:scale-105 md:mb-[-5.5rem] md:max-w-[540px]">
+            <h1 className="relative z-20 w-full max-w-[280px] transition-transform duration-500 hover:scale-105 md:max-w-[380px]">
               <img
-                src="/assets/nolo_wordmark_v1.png"
-                alt="NOLO"
-                className="h-auto w-full object-contain brightness-0 invert drop-shadow-2xl"
+                src="/assets/nolo_imagotipo.png"
+                alt="NOLO CHAVES"
+                className="h-auto w-full object-contain drop-shadow-2xl"
               />
-            </div>
-            <h1 className="relative z-10 font-display text-5xl uppercase leading-none tracking-tight text-white md:text-[7rem]">
-              Chaves
             </h1>
           </div>
 
